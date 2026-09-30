@@ -1,0 +1,36 @@
+{
+  "version": "rubric_v1",
+  "overallMax": 20,
+  "dimensions": [
+    {
+      "id": "requirements",
+      "label": "Requirements & constraints",
+      "maxScore": 4,
+      "guidance": "Clarifies functional and non-functional requirements, scale, and constraints before designing."
+    },
+    {
+      "id": "high_level",
+      "label": "High-level design",
+      "maxScore": 4,
+      "guidance": "Clear components, data flow, and API boundaries that satisfy the problem."
+    },
+    {
+      "id": "data_model",
+      "label": "Data model & storage",
+      "maxScore": 4,
+      "guidance": "Appropriate schema, storage choice, consistency, and access patterns."
+    },
+    {
+      "id": "scalability",
+      "label": "Scalability & reliability",
+      "maxScore": 4,
+      "guidance": "Caching, sharding, queues, failover, and bottleneck awareness."
+    },
+    {
+      "id": "tradeoffs",
+      "label": "Tradeoffs & communication",
+      "maxScore": 4,
+      "guidance": "Explicit tradeoffs, diagram clarity, and coherent verbal explanation."
+    }
+  ]
+}
