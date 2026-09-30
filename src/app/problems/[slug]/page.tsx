@@ -18,14 +18,28 @@ export default async function ProblemPage({
   const attempt = getAttempt(problem.id, session.userId);
 
   return (
-    <>
-      <h1>{problem.title}</h1>
+    <div className="shell-main pad">
+      <p className="label-caps">This week</p>
+      <h1 className="page-title">{problem.title}</h1>
       <p className="muted">
         {problem.weekOf} · {problem.timeboxMinutes} min · due{" "}
         {new Date(problem.dueAt).toLocaleString()}
+        {problem.sourceRoadmapTopic
+          ? ` · topic: ${problem.sourceRoadmapTopic}`
+          : null}
       </p>
-      <div className="prompt">{problem.promptMd}</div>
+      {problem.sourceUrl ? (
+        <p className="caption" style={{ marginTop: "0.5rem" }}>
+          Source:{" "}
+          <a href={problem.sourceUrl} target="_blank" rel="noreferrer">
+            {problem.sourceUrl.replace(/^https?:\/\//, "")}
+          </a>
+        </p>
+      ) : null}
+      <div className="prompt" style={{ whiteSpace: "pre-wrap" }}>
+        {problem.promptMd}
+      </div>
       <SubmitForm slug={problem.slug} initialAttempt={attempt} />
-    </>
+    </div>
   );
 }

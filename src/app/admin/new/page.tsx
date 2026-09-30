@@ -26,6 +26,7 @@ export default function AdminNewPage() {
         dueAt: new Date(String(fd.get("dueAt"))).toISOString(),
         adminOutlineMd: fd.get("adminOutlineMd") || undefined,
         sourceRoadmapTopic: fd.get("sourceRoadmapTopic") || undefined,
+        sourceUrl: fd.get("sourceUrl") || undefined,
       }),
     });
     setPending(false);
@@ -51,9 +52,12 @@ export default function AdminNewPage() {
   }
 
   return (
-    <>
-      <h1>New problem</h1>
-      <form onSubmit={onCreate}>
+    <div className="shell-main pad">
+      <p className="label-caps">Admin</p>
+      <h1 className="page-title">New problem</h1>
+      <p className="muted">Create a slug or publish the next curated item to Discord.</p>
+
+      <form onSubmit={onCreate} style={{ maxWidth: 560, marginTop: "1.5rem" }}>
         <label htmlFor="slug">Slug</label>
         <input id="slug" name="slug" required placeholder="topic-2026-w41" />
 
@@ -85,18 +89,28 @@ export default function AdminNewPage() {
         <label htmlFor="sourceRoadmapTopic">Roadmap topic</label>
         <input id="sourceRoadmapTopic" name="sourceRoadmapTopic" />
 
+        <label htmlFor="sourceUrl">Source URL (systemdesign.io)</label>
+        <input
+          id="sourceUrl"
+          name="sourceUrl"
+          type="url"
+          placeholder="https://systemdesign.io/question/..."
+        />
+
         {error ? <p className="field-error">{error}</p> : null}
         <p style={{ marginTop: "1.25rem" }}>
-          <button className="btn" type="submit" disabled={pending}>
+          <button className="btn dark" type="submit" disabled={pending}>
             {pending ? "Saving…" : "Create"}
           </button>
         </p>
       </form>
 
-      <h2>Publish next to Discord</h2>
+      <h2 className="page-title" style={{ fontSize: "1.25rem", marginTop: "3rem" }}>
+        Publish next to Discord
+      </h2>
       <button
         type="button"
-        className="btn secondary"
+        className="btn secondary on-light"
         onClick={onPublish}
         data-testid="admin-publish"
       >
@@ -107,6 +121,6 @@ export default function AdminNewPage() {
           {publishMsg}
         </pre>
       ) : null}
-    </>
+    </div>
   );
 }

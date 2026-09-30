@@ -34,36 +34,51 @@ export default function LoginClient() {
   }
 
   return (
-    <>
-      <h1>Join study loop</h1>
-      <p className="muted">Shared group password + your display name.</p>
-      <form onSubmit={onSubmit}>
-        <label htmlFor="password">Group password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          data-testid="password"
-        />
-        <label htmlFor="displayName">Display name</label>
-        <input
-          id="displayName"
-          name="displayName"
-          type="text"
-          required
-          maxLength={64}
-          autoComplete="nickname"
-          data-testid="display-name"
-        />
-        {error ? <p className="field-error">{error}</p> : null}
-        <p style={{ marginTop: "1.25rem" }}>
-          <button className="btn" type="submit" disabled={pending}>
-            {pending ? "Signing in…" : "Enter"}
-          </button>
+    <div className="login-hero">
+      <div className="status-badge">
+        <span className="dot" aria-hidden />
+        <span>Friends-only study group</span>
+      </div>
+      <h1 className="hero-title" style={{ maxWidth: "12ch" }}>
+        Join the
+        <span className="glyph" aria-hidden />
+        weekly loop
+      </h1>
+      <p className="hero-sub">Shared group password + your display name.</p>
+
+      <div className="login-card">
+        <h1 style={{ fontSize: "1.35rem" }}>Enter Study Loop</h1>
+        <p className="muted" style={{ marginTop: "0.35rem" }}>
+          Same password for everyone. Grades stay private.
         </p>
-      </form>
-    </>
+        <form onSubmit={onSubmit}>
+          <label htmlFor="password">Group password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            data-testid="password"
+          />
+          <label htmlFor="displayName">Display name</label>
+          <input
+            id="displayName"
+            name="displayName"
+            type="text"
+            required
+            maxLength={64}
+            autoComplete="nickname"
+            data-testid="display-name"
+          />
+          {error ? <p className="field-error">{error}</p> : null}
+          <p style={{ marginTop: "1.35rem" }}>
+            <button className="btn" type="submit" disabled={pending} style={{ width: "100%" }}>
+              {pending ? "Signing in…" : "Enter"}
+            </button>
+          </p>
+        </form>
+      </div>
+    </div>
   );
 }

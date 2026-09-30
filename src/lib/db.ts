@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { v4 as uuid } from "uuid";
-import type { Attempt, GradeResult, Problem, RoadmapItem, Session, User } from "@/lib/types";
+import type { Attempt, AttemptStyle, GradeResult, Problem, RoadmapItem, Room, RoomBoard, RoomMemberStatus, RoomWinner, Session, User } from "@/lib/types";
 import { dbPath, ensureDir, dataDir } from "@/lib/paths";
 import { seedIfEmpty } from "@/lib/seed";
 
@@ -69,7 +69,37 @@ function migrate(db: Database.Database): void {
       next_order_index INTEGER NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS rooms (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      invite_code TEXT NOT NULL UNIQUE,
+      created_by TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(created_by) REFERENCES users(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS room_members (
+      room_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      joined_at TEXT NOT NULL,
+      PRIMARY KEY (room_id, user_id),
+      FOREIGN KEY(room_id) REFERENCES rooms(id),
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    );
   `);
+
+  const attemptCols = db
+    .prepare("PRAGMA table_info(attempts)")
+    .all() as Array<{ name: string }>;
+  if (!attemptCols.some((c) => c.name === "attempt_style")) {
+    db.exec(
+      `ALTER TABLE attempts ADD COLUMN attempt_style TEXT NOT NULL DEFAULT 'diagram'`,
+    );
+  }
+  if (!attemptCols.some((c) => c.name === "interview_json")) {
+    db.exec(`ALTER TABLE attempts ADD COLUMN interview_json TEXT`);
+  }
 }
 
 export function getDb(): Database.Database {
@@ -120,15 +150,28 @@ function parseGrade(raw: string | null): GradeResult | undefined {
   }
 }
 
+function parseJsonUnknown(raw: string | null): unknown | undefined {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
 function mapAttempt(row: Record<string, unknown>): Attempt {
+  const styleRaw = (row.attempt_style as string | null) ?? "diagram";
+  const style: AttemptStyle = styleRaw === "interview" ? "interview" : "diagram";
   return {
     id: row.id as string,
     problemId: row.problem_id as string,
     userId: row.user_id as string,
+    style,
     diagramPath: (row.diagram_path as string | null) ?? undefined,
     audioPath: (row.audio_path as string | null) ?? undefined,
     transcriptText: (row.transcript_text as string | null) ?? undefined,
     diagramCaption: (row.diagram_caption as string | null) ?? undefined,
+    interviewJson: parseJsonUnknown(row.interview_json as string | null),
     gradeJson: parseGrade(row.grade_json as string | null),
     gradedAt: (row.graded_at as string | null) ?? undefined,
     gradeOverrideJson: parseGrade(row.grade_override_json as string | null),
@@ -255,32 +298,40 @@ export function getAttempt(problemId: string, userId: string): Attempt | null {
 export function upsertAttempt(input: {
   problemId: string;
   userId: string;
+  style: AttemptStyle;
   diagramPath?: string;
   audioPath?: string;
   transcriptText: string;
   diagramCaption: string;
+  interviewJson?: unknown;
   gradeJson: GradeResult;
 }): Attempt {
   const db = getDb();
   const now = new Date().toISOString();
   const existing = getAttempt(input.problemId, input.userId);
+  const interviewRaw =
+    input.interviewJson === undefined ? null : JSON.stringify(input.interviewJson);
 
   if (existing) {
     db.prepare(
       `UPDATE attempts SET
+        attempt_style = ?,
         diagram_path = COALESCE(?, diagram_path),
         audio_path = COALESCE(?, audio_path),
         transcript_text = ?,
         diagram_caption = ?,
+        interview_json = COALESCE(?, interview_json),
         grade_json = ?,
         graded_at = ?,
         updated_at = ?
        WHERE id = ?`,
     ).run(
+      input.style,
       input.diagramPath ?? null,
       input.audioPath ?? null,
       input.transcriptText,
       input.diagramCaption,
+      interviewRaw,
       JSON.stringify(input.gradeJson),
       now,
       now,
@@ -293,8 +344,9 @@ export function upsertAttempt(input: {
   db.prepare(
     `INSERT INTO attempts (
       id, problem_id, user_id, diagram_path, audio_path, transcript_text,
-      diagram_caption, grade_json, graded_at, grade_override_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+      diagram_caption, grade_json, graded_at, grade_override_json, created_at, updated_at,
+      attempt_style, interview_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
   ).run(
     id,
     input.problemId,
@@ -307,6 +359,8 @@ export function upsertAttempt(input: {
     now,
     now,
     now,
+    input.style,
+    interviewRaw,
   );
   return getAttempt(input.problemId, input.userId)!;
 }
@@ -345,4 +399,186 @@ export function setDiscordMessageId(problemId: string, messageId: string): void 
 
 export function sessionFromUser(user: User): Session {
   return { userId: user.id, displayName: user.displayName };
+}
+
+function mapRoom(row: Record<string, unknown>): Room {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    inviteCode: row.invite_code as string,
+    createdBy: row.created_by as string,
+    createdAt: row.created_at as string,
+  };
+}
+
+function inviteCode(): string {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  let out = "";
+  for (let i = 0; i < 8; i++) {
+    out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  return out;
+}
+
+export function getCurrentProblem(): Problem | null {
+  return listProblems()[0] ?? null;
+}
+
+export function getRoomById(id: string): Room | null {
+  const row = getDb().prepare("SELECT * FROM rooms WHERE id = ?").get(id) as
+    | Record<string, unknown>
+    | undefined;
+  return row ? mapRoom(row) : null;
+}
+
+export function getRoomByInviteCode(code: string): Room | null {
+  const row = getDb()
+    .prepare("SELECT * FROM rooms WHERE invite_code = ?")
+    .get(code.toLowerCase()) as Record<string, unknown> | undefined;
+  return row ? mapRoom(row) : null;
+}
+
+export function createRoom(name: string, createdBy: string): Room {
+  const db = getDb();
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("Room name required");
+
+  let code = inviteCode();
+  for (let i = 0; i < 8; i++) {
+    const clash = db.prepare("SELECT 1 FROM rooms WHERE invite_code = ?").get(code);
+    if (!clash) break;
+    code = inviteCode();
+  }
+
+  const id = uuid();
+  const now = new Date().toISOString();
+  db.prepare(
+    "INSERT INTO rooms (id, name, invite_code, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+  ).run(id, trimmed, code, createdBy, now);
+  db.prepare(
+    "INSERT INTO room_members (room_id, user_id, joined_at) VALUES (?, ?, ?)",
+  ).run(id, createdBy, now);
+  return getRoomById(id)!;
+}
+
+export function ensureRoomMember(roomId: string, userId: string): void {
+  const db = getDb();
+  const existing = db
+    .prepare("SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?")
+    .get(roomId, userId);
+  if (existing) return;
+  db.prepare(
+    "INSERT INTO room_members (room_id, user_id, joined_at) VALUES (?, ?, ?)",
+  ).run(roomId, userId, new Date().toISOString());
+}
+
+export function listRoomsForUser(userId: string): Room[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT r.* FROM rooms r
+       JOIN room_members m ON m.room_id = r.id
+       WHERE m.user_id = ?
+       ORDER BY r.created_at DESC`,
+    )
+    .all(userId) as Record<string, unknown>[];
+  return rows.map(mapRoom);
+}
+
+function effectiveGrade(attempt: Attempt | null): GradeResult | undefined {
+  if (!attempt) return undefined;
+  return attempt.gradeOverrideJson ?? attempt.gradeJson;
+}
+
+function isSubmitted(attempt: Attempt | null): boolean {
+  const grade = effectiveGrade(attempt);
+  return Boolean(grade && attempt?.gradedAt);
+}
+
+function buildWhy(grade: GradeResult): string {
+  const dims = [...grade.dimensions].sort((a, b) => b.score - a.score).slice(0, 2);
+  const lines = dims.map((d) => `${d.label}: ${d.feedback}`).filter(Boolean);
+  if (lines.length === 0) return grade.summary;
+  return `${grade.summary}\n\n${lines.join("\n")}`;
+}
+
+export function getRoomBoard(roomId: string): RoomBoard | null {
+  const room = getRoomById(roomId);
+  if (!room) return null;
+
+  const problem = getCurrentProblem();
+  const memberRows = getDb()
+    .prepare(
+      `SELECT u.id AS user_id, u.display_name, m.joined_at
+       FROM room_members m
+       JOIN users u ON u.id = m.user_id
+       WHERE m.room_id = ?
+       ORDER BY m.joined_at ASC`,
+    )
+    .all(roomId) as Array<{ user_id: string; display_name: string; joined_at: string }>;
+
+  const members: RoomMemberStatus[] = memberRows.map((row) => {
+    const attempt = problem ? getAttempt(problem.id, row.user_id) : null;
+    const submitted = isSubmitted(attempt);
+    return {
+      userId: row.user_id,
+      displayName: row.display_name,
+      joinedAt: row.joined_at,
+      submitted,
+      style: submitted ? attempt?.style : undefined,
+      gradedAt: submitted ? attempt?.gradedAt : undefined,
+    };
+  });
+
+  const waiting = members.filter((m) => !m.submitted);
+  const submitted = members.filter((m) => m.submitted);
+  const allSubmitted = members.length > 0 && waiting.length === 0;
+
+  let winner: RoomWinner | null = null;
+  if (allSubmitted && problem) {
+    let best: {
+      userId: string;
+      displayName: string;
+      grade: GradeResult;
+      gradedAt: string;
+    } | null = null;
+
+    for (const member of members) {
+      const attempt = getAttempt(problem.id, member.userId);
+      const grade = effectiveGrade(attempt);
+      if (!grade || !attempt?.gradedAt) continue;
+      if (
+        !best ||
+        grade.overallScore > best.grade.overallScore ||
+        (grade.overallScore === best.grade.overallScore &&
+          attempt.gradedAt < best.gradedAt)
+      ) {
+        best = {
+          userId: member.userId,
+          displayName: member.displayName,
+          grade,
+          gradedAt: attempt.gradedAt,
+        };
+      }
+    }
+
+    if (best) {
+      winner = {
+        userId: best.userId,
+        displayName: best.displayName,
+        overallScore: best.grade.overallScore,
+        overallMax: best.grade.overallMax,
+        why: buildWhy(best.grade),
+      };
+    }
+  }
+
+  return {
+    room,
+    problem,
+    members,
+    waiting,
+    submitted,
+    allSubmitted,
+    winner,
+  };
 }

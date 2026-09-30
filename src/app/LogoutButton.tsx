@@ -12,7 +12,7 @@ export function LogoutButton() {
   }
 
   return (
-    <button className="btn secondary" type="button" onClick={onLogout}>
+    <button className="nav-cta" type="button" onClick={onLogout}>
       Log out
     </button>
   );
