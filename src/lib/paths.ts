@@ -2,7 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 
 export function dataDir(): string {
-  return process.env.DATA_DIR ?? "./.data";
+  const fromEnv = process.env.DATA_DIR?.trim();
+  if (fromEnv) return fromEnv;
+  // Production containers (Railway) expect a writable volume at /data.
+  if (process.env.NODE_ENV === "production") return "/data";
+  return path.resolve(process.cwd(), ".data");
 }
 
 export function dbPath(): string {
