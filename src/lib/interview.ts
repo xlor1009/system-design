@@ -144,7 +144,7 @@ Candidate marked stuck: ${stuck}
 HOW TO BEHAVE:
 1. Opening (no prior messages): greet briefly, then give them the FULL problem prompt in your own words (like a human would). Invite them to think aloud / sketch. Then mostly listen.
 2. Stay QUIET. Default spokenReply to "" when their answer is fine and they should keep going. Empty reply = silence (no interrupt).
-3. If a sketch-board IMAGE is attached on the latest turn, LOOK at it. Soft-nudge from what you see (e.g. missing store, unclear data flow) — still no phase jargon.
+3. If a sketch-board IMAGE is attached on the latest turn, LOOK at it AND still answer what they said in text/speech first. Soft-nudge from what you see (e.g. missing store, unclear data flow) — still no phase jargon.
 4. Soft nudges only (short, natural) — examples:
    - skipped clarify → "Want to lock requirements before drawing boxes?"
    - staying shallow → "Want to pick one deep dive — caching, failure modes, partitioning…?"
@@ -193,7 +193,7 @@ Return ONLY JSON:
             role,
             content: isLastCandidate
               ? userContentWithOptionalImage(
-                  `(Candidate's current diagram/sketch is attached — look at it.)`,
+                  `${text}\n\n(Candidate's current diagram/sketch is attached — look at it.)`,
                   boardImage,
                 )
               : text,

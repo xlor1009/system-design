@@ -80,13 +80,18 @@ export function LiveInterview({ slug, onReadyToGrade, initialTranscript }: Props
   const stuckRef = useRef(stuck);
   const pendingRef = useRef(pending);
   const sendLockRef = useRef(false);
+  const outboundQueueRef = useRef<string[]>([]);
 
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
-  useEffect(() => {
-    sessionRef.current = session;
-  }, [session]);
+  function setMessagesSync(next: InterviewMessage[]) {
+    messagesRef.current = next;
+    setMessages(next);
+  }
+
+  function setSessionSync(next: InterviewSessionState | null) {
+    sessionRef.current = next;
+    setSession(next);
+  }
+
   useEffect(() => {
     stuckRef.current = stuck;
   }, [stuck]);
@@ -213,26 +218,34 @@ export function LiveInterview({ slug, onReadyToGrade, initialTranscript }: Props
 
   async function startInterview() {
     setStarted(true);
-    setMessages([]);
-    setSession(null);
+    setMessagesSync([]);
+    setSessionSync(null);
     setStuck(false);
+    outboundQueueRef.current = [];
     const data = await requestTurn([], null, false);
     if (!data) {
       setStarted(false);
       return;
     }
-    setSession(data.session);
+    setSessionSync(data.session);
     if (data.reply.trim()) {
-      setMessages([{ role: "interviewer", content: data.reply }]);
+      setMessagesSync([{ role: "interviewer", content: data.reply }]);
       void speak(data.reply);
     }
+  }
+
+  async function flushOutboundQueue() {
+    const nextText = outboundQueueRef.current.shift();
+    if (nextText) void sendCandidate(nextText);
   }
 
   async function sendCandidate(text: string) {
     const trimmed = text.trim();
     if (!trimmed) return;
     if (pendingRef.current || sendLockRef.current) {
-      setError("Still waiting on the last reply — try Stop & send again in a moment.");
+      // Keep speech for the next free turn instead of dropping it
+      outboundQueueRef.current.push(trimmed);
+      setError("Queued — sending after the interviewer finishes this reply.");
       return;
     }
     sendLockRef.current = true;
@@ -240,28 +253,27 @@ export function LiveInterview({ slug, onReadyToGrade, initialTranscript }: Props
       ...messagesRef.current,
       { role: "candidate", content: trimmed },
     ];
-    setMessages(next);
-    messagesRef.current = next;
+    setMessagesSync(next);
     setDraft("");
     setInterim("");
     speechTextRef.current = "";
+    setError("");
     try {
       const data = await requestTurn(next, sessionRef.current, stuckRef.current);
       if (!data) return;
-      setSession(data.session);
-      sessionRef.current = data.session;
+      setSessionSync(data.session);
       setStuck(false);
       if (data.reply.trim()) {
         const withReply: InterviewMessage[] = [
           ...next,
           { role: "interviewer", content: data.reply },
         ];
-        setMessages(withReply);
-        messagesRef.current = withReply;
+        setMessagesSync(withReply);
         void speak(data.reply);
       }
     } finally {
       sendLockRef.current = false;
+      void flushOutboundQueue();
     }
   }
 
@@ -353,14 +365,11 @@ export function LiveInterview({ slug, onReadyToGrade, initialTranscript }: Props
     };
 
     rec.onend = () => {
-      // Unexpected end (browser timeout / permission). Prefer keep draft;
-      // intentional Stop & send already detached this handler.
+      // Unexpected browser end — keep draft; only Stop & send submits.
       if (recognitionRef.current !== rec) return;
       recognitionRef.current = null;
       setListening(false);
       setInterim("");
-      const text = speechTextRef.current.trim();
-      if (text) void sendCandidate(text);
     };
 
     setListening(true);
