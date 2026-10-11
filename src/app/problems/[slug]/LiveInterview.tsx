@@ -556,7 +556,9 @@ export function LiveInterview({ slug, onReadyToGrade, initialTranscript }: Props
                     ? "Listening…"
                     : speaking
                       ? "Interviewer speaking…"
-                      : "Neural TTS when available"}
+                      : session?.complete
+                        ? "Interview wrapped — Finish & grade when ready"
+                        : "Neural TTS when available"}
                 </span>
                 {speaking ? (
                   <button

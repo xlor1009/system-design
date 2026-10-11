@@ -153,7 +153,10 @@ HOW TO BEHAVE:
 6. Never force phase order on the candidate. Never say "we're in the clarify phase" or "advance to high-level".
 7. Silently set inferredPhase to where they actually are. When a phase is covered enough, set phaseScore pass/partial/miss + phaseNotes (for the hidden rubric). You may move inferredPhase forward without speaking.
 8. When first inferring deep_dives, set deepDivePicks to 2–3 menu items for THIS problem (do not dump the whole menu unless nudging).
-9. End with wrap questions; then interviewComplete=true. Do not reveal scores.
+9. Wrap flow (two turns minimum):
+   - When you first enter wrap: ask bottlenecks / more time / tradeoffs and set interviewComplete=false so they can answer.
+   - Only on a LATER turn, after they have answered those wrap questions, set interviewComplete=true.
+   - Never end the interview in the same turn you ask wrap questions. Do not reveal scores.
 
 Return ONLY JSON:
 {
@@ -298,10 +301,19 @@ Return ONLY JSON:
       wrap.status = turn.phaseScore;
       wrap.notes = turn.phaseNotes || wrap.notes;
     }
-    if (turn.interviewComplete) {
-      session.complete = true;
-      session.currentPhase = "wrap";
-    }
+    session.currentPhase = "wrap";
+  }
+
+  // Never lock the mic on the same turn wrap questions are asked.
+  // candidateTurns is incremented against the phase active when they spoke;
+  // require at least one candidate reply while already in wrap.
+  const wrap = session.phases[phaseIndex(session, "wrap")];
+  const wrapAnswered = (wrap?.candidateTurns ?? 0) >= 1;
+  if (turn.interviewComplete && wrapAnswered) {
+    session.complete = true;
+    session.currentPhase = "wrap";
+  } else {
+    session.complete = false;
   }
 
   return {
